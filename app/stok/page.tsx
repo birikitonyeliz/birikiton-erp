@@ -9,12 +9,16 @@ export default function StokDeposu() {
   const [malzemeler, setMalzemeler] = useState<any[]>([]);
   const [arama, setArama] = useState("");
   
+  // YENİ: Ekleme Formu için Seri No State'i
+  const [seriNo, setSeriNo] = useState("");
   const [isim, setIsim] = useState("");
   const [kategori, setKategori] = useState("ŞASE GRUBU");
   const [miktar, setMiktar] = useState("");
   const [birim, setBirim] = useState("Adet");
 
+  // YENİ: Düzenleme Modalı için Seri No State'i
   const [duzenlenenItem, setDuzenlenenItem] = useState<any | null>(null);
+  const [dSeriNo, setDSeriNo] = useState("");
   const [dIsim, setDIsim] = useState("");
   const [dKategori, setDKategori] = useState("");
   const [dMiktar, setDMiktar] = useState("");
@@ -34,14 +38,25 @@ export default function StokDeposu() {
   const yeniMalzemeEkle = async (e: any) => {
     e.preventDefault();
     if (!isim || !miktar) return;
-    const { data } = await supabase.from("malzemeler").insert([{ isim: isim.toUpperCase(), kategori, miktar: Number(miktar), birim }]).select();
+    
+    // YENİ: seri_no alanı formdan alınıp veritabanına gönderiliyor
+    const { data } = await supabase.from("malzemeler").insert([{ 
+      seri_no: seriNo.toUpperCase(),
+      isim: isim.toUpperCase(), 
+      kategori, 
+      miktar: Number(miktar), 
+      birim 
+    }]).select();
+    
     if (data) { 
       setMalzemeler([data[0], ...malzemeler]); 
-      setIsim(""); setMiktar(""); 
+      setIsim(""); setMiktar(""); setSeriNo(""); // Formu temizlerken seri no'yu da sıfırla
     }
   };
 
   const duzenlemeModaliniAc = (item: any) => {
+    // Tıklanan öğenin verilerini formda göster
+    setDSeriNo(item.seri_no || "");
     setDIsim(item.isim); setDKategori(item.kategori); setDMiktar(item.miktar.toString()); setDBirim(item.birim);
     setDuzenlenenItem(item);
   };
@@ -49,7 +64,16 @@ export default function StokDeposu() {
   const guncellemeyiKaydet = async (e: any) => {
     e.preventDefault();
     if (!duzenlenenItem) return;
-    const { data } = await supabase.from("malzemeler").update({ isim: dIsim.toUpperCase(), kategori: dKategori, miktar: Number(dMiktar), birim: dBirim }).eq("id", duzenlenenItem.id).select();
+    
+    // YENİ: Güncelleme sırasında seri no da kaydediliyor
+    const { data } = await supabase.from("malzemeler").update({ 
+      seri_no: dSeriNo.toUpperCase(),
+      isim: dIsim.toUpperCase(), 
+      kategori: dKategori, 
+      miktar: Number(dMiktar), 
+      birim: dBirim 
+    }).eq("id", duzenlenenItem.id).select();
+
     if (data) { 
       setMalzemeler(malzemeler.map(m => m.id === duzenlenenItem.id ? data[0] : m)); 
       setDuzenlenenItem(null); 
@@ -97,11 +121,16 @@ export default function StokDeposu() {
         onSubmit={yeniMalzemeEkle} initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={smoothSpring}
         className="w-full max-w-7xl bg-slate-900/60 backdrop-blur-2xl p-4 md:p-6 rounded-[2rem] border-2 border-cyan-500/30 shadow-[0_0_40px_rgba(34,211,238,0.1)] mb-10 relative z-10 flex flex-col md:flex-row gap-4 mx-4"
       >
+        {/* YENİ: SERİ NO GİRİŞ ALANI */}
+        <input type="text" placeholder="SERİ NO / KOD" value={seriNo} onChange={(e) => setSeriNo(e.target.value)} className="w-full md:w-40 bg-slate-950/50 border border-cyan-800 rounded-xl p-4 text-cyan-100 focus:border-cyan-400 outline-none uppercase font-bold tracking-wide" />
+        
         <input type="text" placeholder="MATERYAL ADI" value={isim} onChange={(e) => setIsim(e.target.value)} className="flex-1 bg-slate-950/50 border border-cyan-800 rounded-xl p-4 text-cyan-100 focus:border-cyan-400 outline-none uppercase font-bold tracking-wide" />
-        <select value={kategori} onChange={(e) => setKategori(e.target.value)} className="md:w-48 bg-slate-950/50 border border-cyan-800 rounded-xl p-4 text-cyan-100 outline-none appearance-none font-medium">
+        
+        <select value={kategori} onChange={(e) => setKategori(e.target.value)} className="w-full md:w-48 bg-slate-950/50 border border-cyan-800 rounded-xl p-4 text-cyan-100 outline-none appearance-none font-medium">
           {kategoriler.map(kat => <option key={kat} value={kat}>{kat}</option>)}
         </select>
-        <div className="flex gap-2 md:w-64">
+        
+        <div className="flex gap-2 w-full md:w-64">
           <input type="number" placeholder="MİKTAR" value={miktar} onChange={(e) => setMiktar(e.target.value)} className="w-2/3 bg-slate-950/50 border border-cyan-800 rounded-xl p-4 text-cyan-100 focus:border-cyan-400 outline-none font-bold text-center" />
           <select value={birim} onChange={(e) => setBirim(e.target.value)} className="w-1/3 bg-slate-950/50 border border-cyan-800 rounded-xl p-4 text-cyan-100 outline-none appearance-none">
             <option value="Adet">Adet</option><option value="Metre">Mt</option><option value="Litre">Lt</option>
@@ -134,7 +163,7 @@ export default function StokDeposu() {
                 >
                   {/* BARKOD ROZETİ */}
                   <div className="absolute top-4 left-4 bg-slate-950/80 border border-cyan-500/30 px-3 py-1 rounded-lg text-xs font-mono text-cyan-400 flex items-center gap-2 drop-shadow-[0_0_5px_rgba(34,211,238,0.5)] z-10">
-                    <Barcode size={14} /> {item.seri_no || "BİT-XX"}
+                    <Barcode size={14} /> {item.seri_no || "KOD YOK"}
                   </div>
 
                   {kritikMi && <div className="absolute inset-0 bg-red-500/10 animate-pulse rounded-3xl" />}
@@ -178,9 +207,17 @@ export default function StokDeposu() {
               <p className="text-cyan-600 mb-8 tracking-widest text-sm border-b border-cyan-500/20 pb-4">STOK VERİLERİNİ DÜZENLE</p>
 
               <form onSubmit={guncellemeyiKaydet} className="flex flex-col gap-6 relative z-10">
-                <div>
-                  <label className="text-xs text-cyan-500 tracking-widest mb-1 block">MATERYAL ADI</label>
-                  <input type="text" value={dIsim} onChange={(e) => setDIsim(e.target.value)} className="w-full bg-slate-950/80 border border-cyan-800 rounded-2xl p-4 text-cyan-100 focus:border-cyan-400 outline-none uppercase font-bold text-lg" />
+                
+                {/* YENİ: DÜZENLEME MODALINDA SERİ NO VE İSİM YAN YANA */}
+                <div className="flex flex-col md:flex-row gap-4">
+                  <div className="w-full md:w-1/3">
+                    <label className="text-xs text-cyan-500 tracking-widest mb-1 block">SERİ NO / BARKOD</label>
+                    <input type="text" value={dSeriNo} onChange={(e) => setDSeriNo(e.target.value)} className="w-full bg-slate-950/80 border border-cyan-800 rounded-2xl p-4 text-cyan-100 focus:border-cyan-400 outline-none uppercase font-bold text-lg" />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-xs text-cyan-500 tracking-widest mb-1 block">MATERYAL ADI</label>
+                    <input type="text" value={dIsim} onChange={(e) => setDIsim(e.target.value)} className="w-full bg-slate-950/80 border border-cyan-800 rounded-2xl p-4 text-cyan-100 focus:border-cyan-400 outline-none uppercase font-bold text-lg" />
+                  </div>
                 </div>
                 
                 <div>
