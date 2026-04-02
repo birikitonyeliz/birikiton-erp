@@ -24,7 +24,7 @@ export default function StokDeposu() {
   const [dMiktar, setDMiktar] = useState("");
   const [dBirim, setDBirim] = useState("");
 
-  const kategoriler = ["ŞASE GRUBU", "KLAVUZ GRUBU", "KANCA GRUBU", "MOTORLU ŞARYO GRUBU", "ELEKTRİK ŞALT GRUBU"];
+  const kategoriler = ["ŞASE GRUBU", "KLAVUZ GRUBU", "KANCA GRUBU", "MOTORLU ŞARYO GRUBU", "ELEKTRİK ŞALT GRUBU", "UZAKTAN KUMANDA", "EL ALETLERİ VE MAKİNELER", "PAKETLEME"];
 
   const smoothSpring: any = { type: "spring", stiffness: 400, damping: 25, mass: 0.5 };
 
