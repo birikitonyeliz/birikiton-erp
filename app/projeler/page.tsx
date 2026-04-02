@@ -1,17 +1,25 @@
 "use client";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Activity, Plus, Wrench, CheckCircle2, Trash2, Edit2, Check, X, Box, Settings, Search } from "lucide-react";
+import { ArrowLeft, Activity, Plus, Wrench, CheckCircle2, Trash2, Edit2, Check, X, Box, Settings, Search, ClipboardList, Barcode } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "../../lib/supabase";
 
 export default function Projeler() {
   const [projeler, setProjeler] = useState<any[]>([]);
   const [arama, setArama] = useState("");
-  const [projeAdi, setProjeAdi] = useState("");
   const [stok, setStok] = useState<any[]>([]);
   
+  // Şablon ve Proje Ekleme State'leri
+  const [projeAdi, setProjeAdi] = useState("");
+  const [sablonlar, setSablonlar] = useState<any[]>([]);
+  const [seciliSablonId, setSeciliSablonId] = useState("");
+  
   const [seciliProje, setSeciliProje] = useState<any | null>(null);
+  
+  // Proje İçi Düzenleme State'leri
+  const [duzenlenenProjeAdi, setDuzenlenenProjeAdi] = useState("");
+  const [projeIsmiDuzenleniyor, setProjeIsmiDuzenleniyor] = useState(false);
   
   const [seciliMalzeme, setSeciliMalzeme] = useState("");
   const [kullanilanMiktar, setKullanilanMiktar] = useState("");
@@ -24,12 +32,18 @@ export default function Projeler() {
     if (pData) setProjeler(pData);
     const { data: sData } = await supabase.from("malzemeler").select("*").order("isim", { ascending: true });
     if (sData) setStok(sData);
+    const { data: sabData } = await supabase.from("vinc_sablonlari").select("*").order("created_at", { ascending: false });
+    if (sabData) setSablonlar(sabData);
   };
 
   useEffect(() => { fetchData(); }, []);
 
   useEffect(() => {
-    if (seciliProje) projeIceriginiGetir(seciliProje.id);
+    if (seciliProje) {
+      projeIceriginiGetir(seciliProje.id);
+      setDuzenlenenProjeAdi(seciliProje.proje_adi);
+      setProjeIsmiDuzenleniyor(false); // Modal açıldığında edit modunu kapa
+    }
   }, [seciliProje]);
 
   const projeIceriginiGetir = async (projeId: string) => {
@@ -37,11 +51,53 @@ export default function Projeler() {
     if (data) setProjeIcerigi(data);
   };
 
+  // MANUEL PROJE OLUŞTURMA
   const projeOlustur = async (e: any) => {
     e.preventDefault();
     if (!projeAdi) return;
     const { data } = await supabase.from("projeler").insert([{ proje_adi: projeAdi.toUpperCase() }]).select();
     if (data) { setProjeler([data[0], ...projeler]); setProjeAdi(""); }
+  };
+
+  // HAZIR ŞABLONDAN VİNÇ OLUŞTURMA (Otomatik Malzeme Düşme)
+  const hazirVincEkle = async (e: any) => {
+    e.preventDefault();
+    if (!seciliSablonId) return;
+
+    const sablon = sablonlar.find(s => s.id === seciliSablonId);
+    if (!sablon) return;
+
+    // 1. Yeni Projeyi Kaydet
+    const { data: yeniProje } = await supabase.from("projeler").insert([{ proje_adi: sablon.sablon_adi }]).select();
+    if (!yeniProje) return;
+
+    // 2. Şablonun Reçetesini Çek
+    const { data: sMalzemeler } = await supabase.from("sablon_malzemeleri").select("*").eq("sablon_id", seciliSablonId);
+
+    // 3. Projeye Malzemeleri Yaz (Veritabanı trigger'ı otomatik stoğu düşecek)
+    if (sMalzemeler && sMalzemeler.length > 0) {
+      const eklenecekler = sMalzemeler.map(sm => ({
+        proje_id: yeniProje[0].id,
+        malzeme_id: sm.malzeme_id,
+        kullanilan_miktar: sm.miktar
+      }));
+      await supabase.from("proje_malzemeleri").insert(eklenecekler);
+    }
+
+    setSeciliSablonId("");
+    fetchData(); // Ekranı güncelle
+    alert(`DİKKAT: ${sablon.sablon_adi} sisteme eklendi ve reçetedeki tüm materyaller otomatik olarak stoktan düşüldü!`);
+  };
+
+  // PROJE İSMİNİ DÜZENLEME
+  const projeIsmiKaydet = async () => {
+    if (!duzenlenenProjeAdi || !seciliProje) return;
+    const { data } = await supabase.from("projeler").update({ proje_adi: duzenlenenProjeAdi.toUpperCase() }).eq("id", seciliProje.id).select();
+    if (data) {
+      setSeciliProje(data[0]);
+      setProjeler(projeler.map(p => p.id === data[0].id ? data[0] : p));
+      setProjeIsmiDuzenleniyor(false);
+    }
   };
 
   const projeyeMalzemeEkle = async (e: any) => {
@@ -81,7 +137,7 @@ export default function Projeler() {
     }
   };
 
-  const filtrelenmisProjeler = projeler.filter(p => p.proje_adi.toLowerCase().includes(arama.toLowerCase()));
+  const filtrelenmisProjeler = projeler.filter(p => p.proje_adi.toLowerCase().includes(arama.toLowerCase()) || (p.seri_no && p.seri_no.toLowerCase().includes(arama.toLowerCase())));
 
   const smoothSpring: any = { type: "spring", stiffness: 400, damping: 25, mass: 0.5 };
 
@@ -105,33 +161,47 @@ export default function Projeler() {
         <div className="relative w-full md:w-80">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-cyan-500/50" size={20} />
           <input 
-            type="text" placeholder="PROJE ARA..." value={arama} onChange={(e) => setArama(e.target.value)}
+            type="text" placeholder="PROJE VEYA KOD ARA..." value={arama} onChange={(e) => setArama(e.target.value)}
             className="w-full bg-slate-900/80 border-2 border-cyan-500/30 rounded-full py-3 pl-12 pr-4 text-cyan-100 placeholder-cyan-600/50 focus:border-cyan-400 outline-none transition-all focus:shadow-[0_0_20px_rgba(34,211,238,0.3)] font-bold tracking-widest"
           />
         </div>
       </div>
 
-      <motion.form 
-        onSubmit={projeOlustur} 
-        initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={smoothSpring}
-        className="w-full max-w-3xl flex gap-2 md:gap-4 mb-12 relative z-10 bg-slate-900/60 backdrop-blur-2xl p-3 md:p-4 rounded-[3rem] border-2 border-cyan-500/30 shadow-[0_0_40px_rgba(34,211,238,0.1)] mx-4"
-      >
-        <div className="flex-1 relative flex items-center">
-          <Activity className="absolute left-6 text-cyan-500/50" size={24} />
-          <input 
-            type="text" placeholder="YENİ ÜRETİM EMRİ (ÖRN: 5 TON VİNÇ)" 
-            value={projeAdi} onChange={(e) => setProjeAdi(e.target.value)} 
-            className="w-full bg-transparent border-none py-3 pl-16 pr-4 text-cyan-100 placeholder-cyan-600/50 text-base md:text-lg font-bold outline-none uppercase tracking-wider" 
-          />
-        </div>
-        <motion.button 
-          whileHover={{ scale: 1.05, boxShadow: "0px 0px 25px rgba(34,211,238,0.6)" }} whileTap={{ scale: 0.95 }} transition={smoothSpring}
-          type="submit" 
-          className="bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-black px-6 md:px-10 py-3 md:py-4 rounded-full flex items-center gap-2 md:gap-3 shrink-0"
+      {/* İKİLİ MOTOR: MANUEL EKLENTİ VE ŞABLON EKLENTİSİ */}
+      <div className="w-full max-w-7xl flex flex-col md:flex-row gap-6 mb-12 relative z-10 px-4">
+        
+        {/* Özel Üretim Emri */}
+        <motion.form 
+          onSubmit={projeOlustur} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={smoothSpring}
+          className="flex-1 bg-slate-900/60 backdrop-blur-2xl p-3 md:p-4 rounded-[2rem] border-2 border-cyan-500/30 shadow-[0_0_40px_rgba(34,211,238,0.1)] flex items-center gap-4"
         >
-          <Plus size={24} /> <span className="hidden md:inline">BAŞLAT</span>
-        </motion.button>
-      </motion.form>
+          <div className="flex-1 relative flex items-center">
+            <Activity className="absolute left-6 text-cyan-500/50" size={24} />
+            <input type="text" placeholder="ÖZEL ÜRETİM EMRİ (ÖRN: 5 TON VİNÇ)" value={projeAdi} onChange={(e) => setProjeAdi(e.target.value)} className="w-full bg-transparent border-none py-3 pl-16 pr-4 text-cyan-100 placeholder-cyan-600/50 text-sm md:text-base font-bold outline-none uppercase tracking-wider" />
+          </div>
+          <motion.button whileHover={{ scale: 1.05, boxShadow: "0px 0px 25px rgba(34,211,238,0.6)" }} whileTap={{ scale: 0.95 }} transition={smoothSpring} type="submit" className="bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-black px-6 md:px-8 py-3 md:py-4 rounded-xl flex items-center gap-2 md:gap-3 shrink-0">
+            <Plus size={20} /> <span className="hidden md:inline">BAŞLAT</span>
+          </motion.button>
+        </motion.form>
+
+        {/* Hazır Şablon Emri */}
+        <motion.form 
+          onSubmit={hazirVincEkle} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={smoothSpring}
+          className="flex-1 bg-slate-900/60 backdrop-blur-2xl p-3 md:p-4 rounded-[2rem] border-2 border-emerald-500/30 shadow-[0_0_40px_rgba(16,185,129,0.15)] flex items-center gap-4"
+        >
+          <div className="flex-1 relative flex items-center">
+            <ClipboardList className="absolute left-6 text-emerald-500/50" size={24} />
+            <select value={seciliSablonId} onChange={(e) => setSeciliSablonId(e.target.value)} className="w-full bg-transparent border-none py-3 pl-16 pr-4 text-emerald-100 placeholder-emerald-600/50 text-sm md:text-base font-bold outline-none uppercase tracking-wider appearance-none">
+              <option value="" className="bg-slate-900">-- HAZIR ŞABLONDAN ÜRET --</option>
+              {sablonlar.map(s => <option key={s.id} value={s.id} className="bg-slate-900">{s.sablon_adi}</option>)}
+            </select>
+          </div>
+          <motion.button whileHover={{ scale: 1.05, boxShadow: "0px 0px 25px rgba(16,185,129,0.5)" }} whileTap={{ scale: 0.95 }} transition={smoothSpring} type="submit" className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black px-6 md:px-8 py-3 md:py-4 rounded-xl flex items-center gap-2 md:gap-3 shrink-0">
+            <Activity size={20} /> <span className="hidden md:inline">ÜRET</span>
+          </motion.button>
+        </motion.form>
+
+      </div>
 
       <div className="w-full max-w-7xl grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8 md:gap-12 relative z-0 px-4 md:px-10 pb-32 overflow-y-auto h-[65vh] custom-scrollbar place-items-center">
         <AnimatePresence>
@@ -142,7 +212,6 @@ export default function Projeler() {
               animate={{ opacity: 1, scale: 1, y: [0, -12, 0] }}
               exit={{ opacity: 0, scale: 0.5 }}
               transition={{ opacity: { duration: 0.4 }, scale: smoothSpring, y: { repeat: Infinity, duration: 4.5, ease: "easeInOut", delay: index * 0.15 } }}
-              // parent div'e "group" eklendi, böylece buton hover'ı bu alan üzerinden tetiklenecek
               className="flex justify-center items-center w-full aspect-square max-w-[240px] relative group"
             >
               <motion.div
@@ -150,15 +219,18 @@ export default function Projeler() {
                 whileHover={{ scale: 1.08, boxShadow: "0px 0px 40px rgba(34,211,238,0.7)" }}
                 whileTap={{ scale: 0.92 }}
                 onClick={() => setSeciliProje(proje)}
-                // overflow-hidden burada kalıyor ama silme butonu dışarı alındı
-                className="w-full h-full rounded-full bg-gradient-to-br from-slate-800 to-slate-950 border-[3px] border-cyan-500/50 shadow-[0_0_20px_rgba(34,211,238,0.2)] flex flex-col items-center justify-center cursor-pointer p-6 text-center overflow-hidden"
+                className="w-full h-full rounded-full bg-gradient-to-br from-slate-800 to-slate-950 border-[3px] border-cyan-500/50 shadow-[0_0_20px_rgba(34,211,238,0.2)] flex flex-col items-center justify-center cursor-pointer p-6 text-center overflow-hidden relative"
               >
+                {/* PROJE BARKODU / SERİ NOSU */}
+                <div className="absolute top-4 bg-slate-950/80 border border-cyan-500/30 px-3 py-1 rounded-full text-[10px] font-mono text-cyan-400 flex items-center gap-1 drop-shadow-[0_0_5px_rgba(34,211,238,0.5)] z-10">
+                  <Barcode size={12} /> {proje.seri_no || "BİTV-XX"}
+                </div>
+
                 <div className="absolute inset-0 rounded-full border border-cyan-400/20 group-hover:scale-110 transition-transform duration-500" />
-                <Activity size={42} className="text-cyan-400 mb-3 opacity-50 group-hover:opacity-100 group-hover:drop-shadow-[0_0_15px_rgba(34,211,238,0.8)] transition-all duration-300" />
+                <Activity size={42} className="text-cyan-400 mb-3 mt-4 opacity-50 group-hover:opacity-100 group-hover:drop-shadow-[0_0_15px_rgba(34,211,238,0.8)] transition-all duration-300" />
                 <h3 className="text-sm md:text-base font-black tracking-widest text-cyan-100 break-words leading-tight">{proje.proje_adi}</h3>
               </motion.div>
 
-              {/* SİLME BUTONU: Kırpılmamak için kapsülün DİŞINA, sağ üst köşeye alındı! */}
               <motion.button 
                 whileHover={{ scale: 1.2 }} whileTap={{ scale: 0.9 }} onClick={(e) => projeSil(proje.id, e)}
                 className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 text-red-400 hover:text-white transition-all bg-slate-950 border-2 border-red-500/50 hover:bg-red-600 hover:border-red-600 p-3 rounded-full z-10 shadow-[0_0_15px_rgba(239,68,68,0.5)]"
@@ -192,14 +264,29 @@ export default function Projeler() {
               </motion.button>
 
               <div className="w-full md:w-2/5 bg-slate-950/60 p-6 md:p-12 flex flex-col justify-center border-b md:border-b-0 md:border-r border-cyan-500/20">
-                <h2 className="text-2xl md:text-4xl font-black text-cyan-400 tracking-widest mb-2 leading-tight drop-shadow-[0_0_10px_rgba(34,211,238,0.4)]">{seciliProje.proje_adi}</h2>
-                <p className="text-cyan-600 mb-8 md:mb-10 tracking-widest text-xs md:text-sm border-b border-cyan-500/20 pb-4 md:pb-6">ÜRETİM REÇETESİ GİRİŞİ</p>
+                
+                {/* PROJE İSMİ DÜZENLEME BÖLÜMÜ */}
+                <div className="mb-2 flex items-center gap-3">
+                  {projeIsmiDuzenleniyor ? (
+                    <div className="flex w-full items-center gap-2">
+                      <input type="text" value={duzenlenenProjeAdi} onChange={(e) => setDuzenlenenProjeAdi(e.target.value)} className="w-full bg-slate-900 border border-cyan-400 rounded-lg p-2 text-cyan-100 font-black text-xl outline-none" autoFocus />
+                      <motion.button onClick={projeIsmiKaydet} className="bg-green-500/20 text-green-400 p-2 rounded hover:bg-green-500 hover:text-white"><Check size={20}/></motion.button>
+                      <motion.button onClick={() => { setProjeIsmiDuzenleniyor(false); setDuzenlenenProjeAdi(seciliProje.proje_adi); }} className="bg-red-500/20 text-red-400 p-2 rounded hover:bg-red-500 hover:text-white"><X size={20}/></motion.button>
+                    </div>
+                  ) : (
+                    <>
+                      <h2 className="text-2xl md:text-4xl font-black text-cyan-400 tracking-widest leading-tight drop-shadow-[0_0_10px_rgba(34,211,238,0.4)]">{seciliProje.proje_adi}</h2>
+                      <motion.button whileHover={{ scale: 1.2 }} onClick={() => setProjeIsmiDuzenleniyor(true)} className="text-cyan-600 hover:text-cyan-300"><Edit2 size={24} /></motion.button>
+                    </>
+                  )}
+                </div>
+                <p className="text-cyan-600 mb-8 md:mb-10 tracking-widest text-xs md:text-sm border-b border-cyan-500/20 pb-4 md:pb-6 flex items-center gap-2"><Barcode size={16}/> KOD: {seciliProje.seri_no || "BİTV-XX"}</p>
 
                 <form onSubmit={projeyeMalzemeEkle} className="flex flex-col gap-4 md:gap-6">
                   <div className="relative">
                     <Box className="absolute left-4 top-1/2 -translate-y-1/2 text-cyan-500/50" size={20} />
                     <select value={seciliMalzeme} onChange={(e) => setSeciliMalzeme(e.target.value)} className="w-full bg-slate-900 border border-cyan-800 focus:border-cyan-400 rounded-2xl py-4 pl-12 pr-4 text-cyan-100 outline-none appearance-none font-medium tracking-wide">
-                      <option value="">-- STOKTAN MATERYAL SEÇ --</option>
+                      <option value="">-- MANUEL MATERYAL İLAVESİ --</option>
                       {stok.map(item => <option key={item.id} value={item.id}>{item.isim} (Stok: {item.miktar} {item.birim})</option>)}
                     </select>
                   </div>

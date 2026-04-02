@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Plus, Trash2, Box, Edit2, AlertTriangle, Save, Search, X, Layers } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Box, Edit2, AlertTriangle, Save, Search, X, Layers, Barcode } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "../../lib/supabase";
 
@@ -66,7 +66,7 @@ export default function StokDeposu() {
     }
   };
 
-  const filtrelenmisMalzemeler = malzemeler.filter(m => m.isim.toLowerCase().includes(arama.toLowerCase()) || m.kategori.toLowerCase().includes(arama.toLowerCase()));
+  const filtrelenmisMalzemeler = malzemeler.filter(m => m.isim.toLowerCase().includes(arama.toLowerCase()) || m.kategori.toLowerCase().includes(arama.toLowerCase()) || (m.seri_no && m.seri_no.toLowerCase().includes(arama.toLowerCase())));
 
   return (
     <div className="min-h-screen bg-slate-950 text-cyan-400 font-sans p-4 md:p-8 overflow-hidden relative flex flex-col items-center">
@@ -87,7 +87,7 @@ export default function StokDeposu() {
         <div className="relative w-full md:w-80">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-cyan-500/50" size={20} />
           <input 
-            type="text" placeholder="MATERYAL ARA..." value={arama} onChange={(e) => setArama(e.target.value)}
+            type="text" placeholder="MATERYAL VEYA BARKOD ARA..." value={arama} onChange={(e) => setArama(e.target.value)}
             className="w-full bg-slate-900/80 border-2 border-cyan-500/30 rounded-full py-3 pl-12 pr-4 text-cyan-100 placeholder-cyan-600/50 focus:border-cyan-400 outline-none transition-all focus:shadow-[0_0_20px_rgba(34,211,238,0.3)] font-bold tracking-widest"
           />
         </div>
@@ -120,20 +120,23 @@ export default function StokDeposu() {
               <motion.div
                 key={item.id} initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1, y: [0, -10, 0] }} exit={{ opacity: 0, scale: 0.5 }}
                 transition={{ opacity: { duration: 0.4 }, scale: smoothSpring, y: { repeat: Infinity, duration: 4, ease: "easeInOut", delay: index * 0.1 } }}
-                // STOK SİLME BUTONU İÇİN BURAYA "group" EKLENDİ
                 className="w-full h-[220px] relative group"
               >
                 <motion.div
                   layoutId={`stok-kutu-${item.id}`}
                   whileHover={{ scale: 1.05, y: -5 }} whileTap={{ scale: 0.95 }}
                   onClick={() => duzenlemeModaliniAc(item)}
-                  // overflow-hidden burada, silme butonu dışarı alındı
                   className={`w-full h-full rounded-3xl flex flex-col items-center justify-center cursor-pointer p-6 text-center overflow-hidden transition-colors border-2 ${
                     kritikMi 
                       ? "bg-gradient-to-b from-red-950/80 to-slate-950 border-red-500/60 shadow-[0_0_30px_rgba(239,68,68,0.3)] hover:shadow-[0_0_50px_rgba(239,68,68,0.6)]" 
                       : "bg-gradient-to-b from-slate-800 to-slate-950 border-cyan-500/30 shadow-[0_0_20px_rgba(34,211,238,0.1)] hover:shadow-[0_0_40px_rgba(34,211,238,0.4)] hover:border-cyan-400"
                   }`}
                 >
+                  {/* BARKOD ROZETİ */}
+                  <div className="absolute top-4 left-4 bg-slate-950/80 border border-cyan-500/30 px-3 py-1 rounded-lg text-xs font-mono text-cyan-400 flex items-center gap-2 drop-shadow-[0_0_5px_rgba(34,211,238,0.5)] z-10">
+                    <Barcode size={14} /> {item.seri_no || "BİT-XX"}
+                  </div>
+
                   {kritikMi && <div className="absolute inset-0 bg-red-500/10 animate-pulse rounded-3xl" />}
                   {kritikMi ? <AlertTriangle size={36} className="text-red-500 mb-2 drop-shadow-[0_0_15px_rgba(239,68,68,0.8)] animate-pulse" /> : <Box size={36} className="text-cyan-500/50 mb-2 group-hover:text-cyan-400 transition-colors" />}
                   
@@ -145,7 +148,6 @@ export default function StokDeposu() {
                   <p className="text-[10px] text-cyan-500/60 mt-2 tracking-widest uppercase">{item.kategori}</p>
                 </motion.div>
 
-                {/* SİLME BUTONU: Kırpılmamak için kapsülün DİŞINA alındı! */}
                 <motion.button 
                   whileHover={{ scale: 1.2 }} whileTap={{ scale: 0.9 }} onClick={(e) => malzemeSil(item.id, e)}
                   className="absolute -top-3 -right-3 opacity-0 group-hover:opacity-100 text-red-400 hover:text-white transition-all bg-slate-950 border-2 border-red-500/50 hover:bg-red-600 hover:border-red-600 p-3 rounded-full z-10 shadow-[0_0_15px_rgba(239,68,68,0.5)]"
