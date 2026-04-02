@@ -1,6 +1,6 @@
 "use client";
 import { motion } from "framer-motion";
-import { Activity, Box } from "lucide-react";
+import { Activity, Box, ClipboardList } from "lucide-react";
 import Link from "next/link";
 
 
@@ -79,6 +79,21 @@ export default function Home() {
           <Box size={56} className="mb-4 text-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.8)]" />
           <h2 className="text-xl font-bold tracking-widest">STOK DEPOSU</h2>
           <p className="text-xs text-cyan-500/80 mt-2 tracking-wider">MALZEME ENVANTERİ</p>
+        </motion.div>
+      </Link>
+      <Link href="/sablonlar">
+        <motion.div
+          initial={{ opacity: 0, x: 60 }}
+          animate={{ opacity: 1, x: 0, y: [0, -10, 0] }}
+          transition={{ opacity: { duration: 0.4 }, x: springTransition, y: { repeat: Infinity, duration: 3.2, ease: "easeInOut", delay: 0.6 } }}
+          whileHover={{ scale: 1.1, boxShadow: "0px 0px 40px rgba(16, 185, 129, 0.6)", y: -15 }}
+          whileTap={{ scale: 0.9 }}
+          className="w-64 h-64 bg-slate-900/40 backdrop-blur-xl border border-emerald-500/40 rounded-3xl flex flex-col items-center justify-center cursor-pointer transition-colors hover:bg-slate-800/60"
+        >
+          {/* Import'lara import { ClipboardList } from "lucide-react"; eklemeyi unutma! */}
+          <ClipboardList size={56} className="mb-4 text-emerald-400 drop-shadow-[0_0_10px_rgba(16,185,129,0.8)]" />
+          <h2 className="text-xl font-bold tracking-widest text-emerald-400">ŞABLONLAR</h2>
+          <p className="text-xs text-emerald-500/80 mt-2 tracking-wider">HAZIR VİNÇ REÇETELERİ</p>
         </motion.div>
       </Link>
       </div>
